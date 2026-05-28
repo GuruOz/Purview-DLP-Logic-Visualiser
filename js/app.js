@@ -551,7 +551,7 @@ window.initApp = function() {
     window.importPurviewJSON = function() {
         try {
             const rawText = document.getElementById('jsonPayload').value;
-            const res = importPurviewJSON(rawText, variables);
+            const res = parsePurviewJSON(rawText, variables);
             setPolicies(res.policies);
             setVariables(res.variables);
             setActivePolicyIndex(0);
@@ -569,7 +569,7 @@ window.initApp = function() {
     window.importVisualizerJSON = function() {
         try {
             const rawText = document.getElementById('jsonPayload').value;
-            const res = importVisualizerJSON(rawText);
+            const res = parseVisualizerJSON(rawText);
             setPolicies(res.policies);
             setVariables(res.variables);
             setActivePolicyIndex(0);
@@ -585,7 +585,7 @@ window.initApp = function() {
     };
 
     window.exportVisualizerJSON = function() {
-        const payload = exportVisualizerJSON(policies, variables);
+        const payload = serializeVisualizerJSON(policies, variables);
         document.getElementById('jsonPayload').value = payload;
     };
 

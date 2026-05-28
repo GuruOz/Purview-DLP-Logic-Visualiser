@@ -72,7 +72,7 @@ window.parseAdvancedRuleAST = function(astNode, localVariables = []) {
     return tokens;
 };
 
-window.importPurviewJSON = function(rawText, currentVariables = []) {
+window.parsePurviewJSON = function(rawText, currentVariables = []) {
     const data = JSON.parse(rawText);
     const exportArray = Array.isArray(data) ? data : [data];
     
@@ -204,7 +204,7 @@ window.importPurviewJSON = function(rawText, currentVariables = []) {
     };
 };
 
-window.importVisualizerJSON = function(rawText) {
+window.parseVisualizerJSON = function(rawText) {
     const data = JSON.parse(rawText);
     if (data.policies && data.variables) {
         return {
@@ -215,6 +215,6 @@ window.importVisualizerJSON = function(rawText) {
     throw new Error("Invalid visualizer JSON format.");
 };
 
-window.exportVisualizerJSON = function(policies, variables) {
+window.serializeVisualizerJSON = function(policies, variables) {
     return JSON.stringify({ variables, policies }, null, 2);
 };
