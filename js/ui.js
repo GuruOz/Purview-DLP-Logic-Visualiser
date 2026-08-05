@@ -93,7 +93,7 @@ function renderPolicies() {
                     </div>
                     <span class="text-[10px] font-bold uppercase tracking-widest bg-indigo-600 text-white px-1.5 py-0.5 rounded shrink-0">Policy</span>
                     <h2 class="font-bold text-lg outline-none focus:bg-white dark:focus:bg-gray-700 focus:ring-2 focus:ring-indigo-300 rounded px-1 min-w-[100px] max-w-full break-words dark:text-white" contenteditable="true" data-type="policy" data-pindex="${pIndex}">${window.escapeHtml(policy.name)}</h2>
-                    <span class="text-xs bg-indigo-100 dark:bg-indigo-900/40 px-2 py-1 rounded text-indigo-700 dark:text-indigo-300 font-mono">Priority ${pIndex}</span>
+                    <span class="text-xs bg-indigo-100 dark:bg-indigo-900/40 px-2 py-1 rounded text-indigo-700 dark:text-indigo-300 font-mono">Priority ${policy.priority !== undefined ? policy.priority : pIndex}</span>
                     <label class="flex items-center gap-1 text-sm font-normal ml-4 cursor-pointer dark:text-gray-300"><input type="checkbox" data-action="toggle-policy" data-pindex="${pIndex}" ${policy.enabled ? 'checked' : ''}> Enabled</label>
                 </div>
                 <div class="flex gap-2">

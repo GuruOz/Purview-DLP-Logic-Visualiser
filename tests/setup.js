@@ -18,7 +18,7 @@ function loadScript(file) {
     Function(
         'window', 'document', 'localStorage', 'sessionStorage',
         'console', 'setTimeout', 'clearTimeout', 'URL', 'URLSearchParams',
-        'btoa', 'atob', 'encodeURIComponent', 'decodeURIComponent',
+        'btoa', 'atob', 'encodeURIComponent', 'decodeURIComponent', 'DOMParser',
         code
     )(
         globalThis,
@@ -33,7 +33,8 @@ function loadScript(file) {
         globalThis.btoa,
         globalThis.atob,
         globalThis.encodeURIComponent,
-        globalThis.decodeURIComponent
+        globalThis.decodeURIComponent,
+        globalThis.DOMParser
     );
 }
 
@@ -43,6 +44,9 @@ loadScript('js/constants.js');
 loadScript('js/state.js');
 loadScript('js/evaluator.js');
 loadScript('js/parser.js');
+loadScript('js/har-extract.js');
+loadScript('js/har-parser.js');
+loadScript('js/policy-csv.js');
 loadScript('js/conflict-detector.js');
 loadScript('js/nl-generator.js');
 loadScript('js/summary-ui.js');
