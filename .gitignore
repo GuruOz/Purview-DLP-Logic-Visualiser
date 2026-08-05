@@ -1,1 +1,9 @@
 node_modules/
+
+# HAR captures contain live bearer tokens, cookies and tenant data — never commit one.
+HAR/
+*.har
+
+# Local tooling state, not project code.
+.claude/
+.reasonix/

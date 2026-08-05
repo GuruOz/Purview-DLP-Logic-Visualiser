@@ -1,4 +1,9 @@
-const CACHE_NAME = 'dlp-visualizer-v1.5.0';
+// Must match window.APP_VERSION in js/version.js — the fetch handler below is
+// cache-first with no revalidation, so a cached asset is served until the cache
+// is dropped, and activate() only drops caches whose name differs from this one.
+// Leaving this stale ships old JS to everyone who has already loaded the app.
+// tests/sw-cache.test.js fails the build if the two drift apart.
+const CACHE_NAME = 'dlp-visualizer-v1.10.0';
 
 const ASSETS = [
     '/purview-dlp-logic-visualiser/',
@@ -16,6 +21,11 @@ const ASSETS = [
     '/purview-dlp-logic-visualiser/js/nl-generator.js',
     '/purview-dlp-logic-visualiser/js/evaluator.js',
     '/purview-dlp-logic-visualiser/js/parser.js',
+    '/purview-dlp-logic-visualiser/js/har-worker.js',
+    '/purview-dlp-logic-visualiser/js/har-extract.js',
+    '/purview-dlp-logic-visualiser/js/har-parser.js',
+    '/purview-dlp-logic-visualiser/js/har-import.js',
+    '/purview-dlp-logic-visualiser/js/policy-csv.js',
     '/purview-dlp-logic-visualiser/js/conflict-detector.js',
     '/purview-dlp-logic-visualiser/js/ui.js',
     '/purview-dlp-logic-visualiser/js/examples.js',

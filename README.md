@@ -24,6 +24,7 @@ This tool gives Purview engineers a visual rule builder where they can compose c
 - **Workspace file backup** — download the entire workspace as a timestamped `.json` file and load it back later, independent of the browser's local storage
 - **URL sharing** — serializes the entire workspace state into the URL so you can share an exact configuration with a link
 - **PowerShell JSON import** — paste the JSON output of `Get-DlpComplianceRule` (from the Security & Compliance PowerShell module) to reverse-engineer an existing policy into the visual builder
+- **Purview portal HAR import** — load your tenant's real DLP policies and rules straight from a browser HAR capture of the DLP policy page (F12 → Network → *Save all as HAR*), without needing PowerShell or admin credentials; parsed fully locally in a Web Worker
 - **PowerShell JSON export** — generate a JSON payload compatible with `New-DlpComplianceRule` / `Set-DlpComplianceRule`
 - **Dark mode** — full light/dark theme toggle, persisted per browser
 - **No build step** — plain HTML, CSS (Tailwind via CDN), and vanilla JavaScript; open `index.html` and it works
@@ -62,6 +63,28 @@ Navigate to the **Simulator** tab (`simulator.html`). The simulator reads the cu
    ```
 2. In the Rule Builder, click **Import / Export**, paste the JSON into the text area, and click **Import Purview PowerShell JSON**
 3. The parser maps PowerShell property names to the visualizer's condition vocabulary and reconstructs the full boolean expression
+
+### Importing from a Purview portal HAR
+
+No PowerShell or admin rights needed — anyone with portal access can capture their tenant's real configuration:
+
+1. In the Purview portal, open the **Data loss prevention → Policies** page and press **F12** (DevTools)
+2. Switch to the **Network** tab and **refresh** the page so the DLP API calls are captured
+3. **Click into a rule you care about** (open it for editing) before saving — the portal then fetches that rule's *complete* definition (`Get-DlpComplianceRule`), which the importer uses in preference to the Lite summary: real condition values, correct actions, and the rule's exact policy (no fuzzy matching needed for it). Clicking into more rules captures more full detail
+4. Right-click anywhere in the request list and choose **Save all as HAR**
+5. In the Rule Builder, click **Import / Export → Import from HAR…** and pick the `.har` file
+6. A preview lists every rule under the policy it matched (unmatched rules under `Unmatched Rules (from HAR)`); tick the ones to import (all are selected by default) and click **Import Selected** — the workspace is replaced in one undoable step
+
+Notes:
+
+- The capture is parsed **entirely locally in a Web Worker** — nothing is uploaded. **A HAR contains bearer tokens, cookies and tenant data: never share or commit the file.**
+- If you open `index.html` straight from disk (`file://`), browsers forbid Workers on that opaque origin — the import then falls back to main-thread parsing (same logic, still fully local), so very large captures may briefly pause the page. Serving the folder (e.g. `npx http-server` or GitHub Pages) keeps the responsive worker path.
+- Rules are grouped into policies by matching on the leading policy code — `G006`, `HTA001`, `SPF003`, `MHA001A`, … (agency-style codes are handled as well as G-codes, with a guard so near-duplicate families like G075/G076 are never crossed). Rules whose code has no matching policy are collected into an `Unmatched Rules (from HAR)` policy for manual filing
+- **Priority:** the portal fetches rules with `filter=Lite`, which zeroes every rule's `Priority` field — the capture contains no real priority data (even the full `Get-DlpComplianceRule` invoked when you edit a rule returns 0). Imported rules therefore keep their capture order and receive a 1-based ordinal (their position within the policy), which is exported as the PowerShell `Priority`; PowerShell JSON import reads `Priority` too. Re-order rules in the builder to set the order you actually want
+- **Policy priorities from the portal CSV export** — in the Purview portal (DLP → Policies), click **Export** and save the CSV, then in the Playground use **Import / Export → Load Policy CSV…**. Policies are matched by name (case/punctuation-insensitive), reordered to the tenant's real evaluation order, given their real On/Off state, and the priority badge shows the portal value. The CSV is policy-level: it carries the tenant-wide policy priority, not per-rule priority (that still isn't available anywhere in the portal's browser traffic). CSV policies with no matching workspace policy are reported in the summary — rename the workspace policy to the portal's name to pick them up
+- Keyword lists (`textScan`) and `Item.ContentFileType` IDs are **not recoverable** from the capture (the portal never sends them to the browser); these conditions render with a visible `(not in capture)` marker and a warning
+- The portal sends rules with `filter=Lite`, which strips PowerShell condition fields — this is why HAR import reads the rules' `RuleXml` rather than reusing the PowerShell JSON parser
+- Policy↔rule grouping is **inferred**, not authoritative: spot-check imported rules against your tenant
 
 ### Exporting to PowerShell
 

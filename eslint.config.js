@@ -31,6 +31,10 @@ const browserGlobals = {
     CompressionStream: 'readonly',
     DecompressionStream: 'readonly',
     Response: 'readonly',
+    DOMParser: 'readonly',
+    Worker: 'readonly',
+    importScripts: 'readonly',
+    self: 'readonly',
 };
 
 // Functions set on window.* in one script and called bare (without window. prefix) in another.
@@ -113,6 +117,17 @@ const appGlobals = {
     parseVisualizerJSON: 'readonly',
     serializeVisualizerJSON: 'readonly',
     serializePurviewJSON: 'readonly',
+    // har-parser.js
+    buildWorkspaceFromHar: 'readonly',
+    parseRuleXml: 'readonly',
+    harConditionToken: 'readonly',
+    matchRuleToPolicy: 'readonly',
+    // har-import.js
+    startHarImport: 'readonly',
+    // policy-csv.js
+    parsePolicyCsv: 'readonly',
+    applyPolicyCsv: 'readonly',
+    loadPolicyCsvFile: 'readonly',
     // logger.js
     logEvent: 'readonly',
     dlpLogs: 'readonly',

@@ -1,4 +1,47 @@
-window.parseAdvancedRuleAST = function(astNode, localVariables = []) {
+// EndpointDlpRestrictions is a nested pile of OData hash tables — arrays of {_key,_value}
+// where a _value can itself be another array of them. The verdict (Block / Warn / Audit)
+// appears either as a restriction's own "value", or, for grouped settings like
+// CloudEgress, as an "action" on each destination group while the outer "value" reads
+// "None". Walking for the verdict keys wherever they sit is what makes both shapes work.
+// Audit deliberately maps to nothing here: it is plain logging, already covered by
+// GenerateAlert → monitor.
+window.collectEndpointVerdicts = function(restrictions) {
+    const found = { block: false, warn: false, audit: false, requiresJustification: false };
+    if (!restrictions) return found;
+
+    (function walk(node) {
+        if (Array.isArray(node)) { node.forEach(walk); return; }
+        if (!node || typeof node !== 'object') return;
+
+        const key = typeof node._key === 'string' ? node._key.toLowerCase() : null;
+        const value = node._value;
+
+        if (key && typeof value === 'string') {
+            const v = value.toLowerCase();
+            if (key === 'value' || key === 'action') {
+                if (v === 'block') found.block = true;
+                else if (v === 'warn') found.warn = true;
+                else if (v === 'audit') found.audit = true;
+                else if (v === 'required') found.requiresJustification = true;
+            }
+        } else if (value !== undefined) {
+            walk(value); // grouped settings nest another hash-table array here
+        }
+
+        if (node._key === undefined) Object.keys(node).forEach(k => walk(node[k]));
+    })(restrictions);
+
+    return found;
+};
+
+// resolvers is optional: { label, fileType }, each a function returning a display string.
+// HAR import passes resolvers built from the capture's own catalogs so a rule reads the
+// way the portal shows it — "SECRET/NON-SENSITIVE" rather than Purview's internal name
+// "Non Sensitive_2", and "Spreadsheet (Excel, CSV, TSV)" rather than a bare GUID.
+// PowerShell JSON imports carry no catalogs and pass nothing, keeping the raw values.
+window.parseAdvancedRuleAST = function(astNode, localVariables = [], resolvers) {
+    const labelResolver = resolvers && resolvers.label;
+    const fileTypeResolver = resolvers && resolvers.fileType;
     if (!astNode) return [];
     let tokens = [];
 
@@ -25,11 +68,11 @@ window.parseAdvancedRuleAST = function(astNode, localVariables = []) {
         let valStrArr = [];
         if (Array.isArray(astNode.Value)) {
             astNode.Value.forEach(v => {
-                if (typeof v === 'object') {
+                if (typeof v === 'object' && v !== null) {
                     if (v.Name) valStrArr.push(v.Name);
                     else if (v.Groups) {
                         v.Groups.forEach(g => {
-                            if (g.Labels) g.Labels.forEach(l => valStrArr.push(l.Name));
+                            if (g.Labels) g.Labels.forEach(l => valStrArr.push(labelResolver ? labelResolver(l) : l.Name));
                             else if (g.Sensitivetypes) g.Sensitivetypes.forEach(s => valStrArr.push(s.Name));
                         });
                     }
@@ -37,8 +80,22 @@ window.parseAdvancedRuleAST = function(astNode, localVariables = []) {
                     valStrArr.push(v);
                 }
             });
+        } else if (astNode.Value && typeof astNode.Value === 'object') {
+            // Header conditions carry a MAP of header name → values, not a flat array:
+            // HeaderContainsWords → {"x-cdlp-device": ["OutlookWindows", "OutlookWebApp"]}.
+            // Without this the object fell through to the push below and rendered as the
+            // literal string "[object Object]", losing both the header and its values.
+            Object.keys(astNode.Value).forEach(headerName => {
+                const hv = astNode.Value[headerName];
+                (Array.isArray(hv) ? hv : [hv]).forEach(item => valStrArr.push(`${headerName}: ${item}`));
+            });
         } else if (astNode.Value !== undefined) {
             valStrArr.push(astNode.Value);
+        }
+
+        // Content file types arrive as bare GUIDs; the portal's own table names them.
+        if (fileTypeResolver && /FileType/i.test(base)) {
+            valStrArr = valStrArr.map(v => fileTypeResolver(v));
         }
 
         let propVal = valStrArr.join(", ");
@@ -59,7 +116,7 @@ window.parseAdvancedRuleAST = function(astNode, localVariables = []) {
             tokens.push({ type: 'operator', val: 'NOT' });
             tokens.push({ type: 'operator', val: '(' });
             if (astNode.SubConditions && astNode.SubConditions.length > 0) {
-                tokens = tokens.concat(window.parseAdvancedRuleAST(astNode.SubConditions[0], localVariables));
+                tokens = tokens.concat(window.parseAdvancedRuleAST(astNode.SubConditions[0], localVariables, resolvers));
             }
             tokens.push({ type: 'operator', val: ')' });
         } else if (op === "AND" || op === "OR") {
@@ -68,7 +125,7 @@ window.parseAdvancedRuleAST = function(astNode, localVariables = []) {
                 if (hasMultiple) tokens.push({ type: 'operator', val: '(' });
                 
                 astNode.SubConditions.forEach((sub, idx) => {
-                    let subTokens = window.parseAdvancedRuleAST(sub, localVariables);
+                    let subTokens = window.parseAdvancedRuleAST(sub, localVariables, resolvers);
                     if (subTokens.length > 0 && subTokens[0].val === 'NOT') {
                         subTokens.shift(); 
                         if (idx > 0) tokens.push({ type: 'operator', val: 'AND NOT' });
@@ -89,7 +146,7 @@ window.parseAdvancedRuleAST = function(astNode, localVariables = []) {
     return tokens;
 };
 
-window.parsePurviewJSON = function(rawText, currentVariables = []) {
+window.parsePurviewJSON = function(rawText, currentVariables = [], resolvers) {
     if (window.logEvent) window.logEvent('info', 'parser', 'Starting to parse Microsoft Purview JSON data', { byteLength: rawText.length });
     const data = JSON.parse(rawText);
     const exportArray = Array.isArray(data) ? data : [data];
@@ -121,6 +178,19 @@ window.parsePurviewJSON = function(rawText, currentVariables = []) {
             if (ruleObj.NotifyUser && ruleObj.NotifyUser.length > 0) actions.notify = true;
             if (ruleObj.NotifyAllowOverride || (ruleObj.NotifyOverrideRequirements && ruleObj.NotifyOverrideRequirements !== "None")) actions.override = true;
             if ((ruleObj.GenerateAlert && ruleObj.GenerateAlert.length > 0) || (ruleObj.GenerateIncidentReport && ruleObj.GenerateIncidentReport.length > 0)) actions.monitor = true;
+
+            // Endpoint DLP actions live in their OWN fields — the checks above are all
+            // Exchange-side, so an endpoint rule that blocks web uploads used to import
+            // with nothing but Monitor ticked (31 of 45 full-detail rules in a real
+            // tenant capture). BlockAccess is literally false on those rules; the verdict
+            // sits inside EndpointDlpRestrictions instead.
+            const verdicts = window.collectEndpointVerdicts(ruleObj.EndpointDlpRestrictions);
+            if (verdicts.block) actions.block = true;
+            // "Warn" lets the user proceed anyway, and a required business justification
+            // is the same affirm-then-continue flow — both are an override.
+            if (verdicts.warn || verdicts.requiresJustification) actions.override = true;
+            // The endpoint policy tip (NotificationTitle/Content shown on the device).
+            if (Array.isArray(ruleObj.NotifyEndpointUser) && ruleObj.NotifyEndpointUser.length > 0) actions.notify = true;
             const stopProcessing = !!ruleObj.StopPolicyProcessing;
 
             let workloads = { email: true, endpoint: true };
@@ -135,7 +205,7 @@ window.parsePurviewJSON = function(rawText, currentVariables = []) {
                 let ast;
                 try { ast = JSON.parse(ruleObj.AdvancedRule); } catch(_e) {}
                 if (ast && ast.Condition) {
-                    tokens = window.parseAdvancedRuleAST(ast.Condition, localVariables);
+                    tokens = window.parseAdvancedRuleAST(ast.Condition, localVariables, resolvers);
                     if (tokens.length > 0 && tokens[0].val === 'AND NOT') {
                         tokens[0].val = 'NOT';
                     }
@@ -209,6 +279,7 @@ window.parsePurviewJSON = function(rawText, currentVariables = []) {
                 id: window.generateId(), 
                 name: rName, 
                 enabled: ruleObj.Disabled === false || ruleObj.Disabled === undefined,
+                priority: typeof ruleObj.Priority === 'number' ? ruleObj.Priority : undefined,
                 tokens: tokens,
                 actions: actions,
                 stopProcessing: stopProcessing,
@@ -351,7 +422,7 @@ window.serializePurviewJSON = function(policies) {
                     Name: rule.name,
                     DisplayName: rule.name,
                     Disabled: rule.enabled === false,
-                    Priority: rIdx,
+                    Priority: rule.priority !== undefined ? rule.priority : rIdx,
                     StopPolicyProcessing: !!rule.stopProcessing,
                     Workload: workloads.join(',') || 'Exchange',
                     BlockAccess: !!actions.block,

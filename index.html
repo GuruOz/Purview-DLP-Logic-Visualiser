@@ -45,7 +45,7 @@
             </div>
             <textarea id="jsonPayload" class="w-full flex-grow border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded p-4 font-mono text-xs focus:outline-none focus:border-blue-500 mb-3" placeholder='Paste JSON here...'></textarea>
             <!-- Format guide -->
-            <div class="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            <div class="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                 <div class="rounded border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 p-2.5">
                     <div class="font-bold text-purple-800 dark:text-purple-300 mb-1 flex items-center gap-1">
                         <span class="inline-block w-2 h-2 rounded-full bg-purple-600"></span> Purview PowerShell format
@@ -62,6 +62,20 @@
                     <ul class="text-blue-700 dark:text-blue-400 space-y-0.5 leading-snug">
                         <li><strong>Import:</strong> restore a previously exported Purview Playground workspace.</li>
                         <li><strong>Export:</strong> save your current workspace for backup or sharing — <em>not</em> for Purview PowerShell.</li>
+                    </ul>
+                </div>
+                <div class="rounded border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20 p-2.5">
+                    <div class="font-bold text-teal-800 dark:text-teal-300 mb-1 flex items-center gap-1">
+                        <span class="inline-block w-2 h-2 rounded-full bg-teal-600"></span> Purview portal HAR capture
+                    </div>
+                    <ul class="text-teal-700 dark:text-teal-400 space-y-0.5 leading-snug">
+                        <li><strong>Import:</strong> open the DLP policy page in Purview, press F12, refresh, then choose <em>Save all as HAR</em> from the Network tab — then pick exactly which rules to import (grouped under their matched policy).</li>
+                        <li><strong>Privacy:</strong> parsing is 100% local — nothing is uploaded. A HAR contains bearer tokens and tenant data, so never share or commit the file.</li>
+                        <li><strong>Caveats:</strong> keyword lists and file-type IDs are not recoverable from the capture, and policy↔rule grouping is inferred, not authoritative.</li>
+                        <li><strong>Tip:</strong> click into a rule (open it for editing) before saving the HAR — its full conditions and exact policy are then captured and used for that rule.</li>
+                        <li><strong>Priority:</strong> the portal's capture zeroes rule priorities — imported rules keep capture order with a 1-based ordinal that exports as PowerShell <code class="font-mono">Priority</code>.</li>
+                        <li><strong>Policy priority:</strong> export the portal's DLP policies list (Policies → Export) and load it with <em>Load Policy CSV…</em> to apply the real policy evaluation order and On/Off state.</li>
+                        <li><strong>Note:</strong> when the page is opened straight from disk (file://), the capture is parsed on the main thread, so very large HARs may briefly pause the page.</li>
                     </ul>
                 </div>
             </div>
@@ -83,6 +97,16 @@
                         Load Workspace File…
                     </button>
                     <input type="file" id="workspaceFileInput" accept=".json,application/json" class="hidden">
+                    <button onclick="document.getElementById('harFileInput').click()" class="bg-teal-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-teal-700 flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                        Import from HAR…
+                    </button>
+                    <input type="file" id="harFileInput" accept=".har,application/json" class="hidden">
+                    <button onclick="document.getElementById('policyCsvInput').click()" class="bg-gray-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-gray-700 flex items-center gap-1.5" title="Apply real policy priorities and On/Off state from the portal's DLP policies CSV export">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Load Policy CSV…
+                    </button>
+                    <input type="file" id="policyCsvInput" accept=".csv,text/csv" class="hidden">
                 </div>
                 <button onclick="downloadWorkspaceFile()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700 flex items-center gap-1.5">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" transform="rotate(180 12 12)"></path></svg>
@@ -105,6 +129,28 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- HAR Import Preview Modal (rule selection before committing an import) -->
+    <div id="harPreviewModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-full max-w-3xl max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center mb-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+                <h2 class="text-xl font-bold dark:text-white">Import Rules from HAR</h2>
+                <button onclick="closeHarPreview()" aria-label="Close rules preview dialog" class="text-gray-500 hover:text-black dark:hover:text-white font-bold text-xl">&times;</button>
+            </div>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">Select which rules to import — they replace the current workspace. Rules are grouped under the policy they matched; rules with no matching policy appear under <strong>Unmatched Rules (from HAR)</strong>.</p>
+            <div class="flex items-center gap-3 mb-2 text-sm">
+                <button id="harSelectAllBtn" class="px-3 py-1 rounded border border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-400 font-semibold hover:bg-teal-50 dark:hover:bg-teal-900/30">Select all</button>
+                <button id="harSelectNoneBtn" class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700/50">Select none</button>
+                <span id="harSelectionCount" class="ml-auto font-semibold text-gray-700 dark:text-gray-300"></span>
+            </div>
+            <div id="harRuleList" class="flex flex-col gap-2 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded p-2 pr-1 custom-scrollbar"></div>
+            <div class="flex justify-end gap-3 mt-4">
+                <button id="harImportCancelBtn" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-4 py-2 rounded font-semibold hover:bg-gray-300 dark:hover:bg-gray-600">Cancel</button>
+                <button id="harImportSelectedBtn" class="bg-teal-600 text-white px-4 py-2 rounded font-semibold hover:bg-teal-700">Import Selected (0)</button>
+            </div>
+            <div id="harPreviewError" class="mt-2 text-red-600 dark:text-red-400 text-sm hidden"></div>
         </div>
     </div>
 
@@ -271,6 +317,10 @@
     <script src="js/nl-generator.js"></script>
     <script src="js/evaluator.js"></script>
     <script src="js/parser.js"></script>
+    <script src="js/har-extract.js"></script>
+    <script src="js/har-parser.js"></script>
+    <script src="js/har-import.js"></script>
+    <script src="js/policy-csv.js"></script>
     <script src="js/conflict-detector.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/examples.js"></script>
